@@ -13,6 +13,7 @@ logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__fil
 def get_pv_current():
     # HACKY
     # we don't have a connection to the right PV installation yet, so we do fetch percentage of our other installation (similar orientation) and calculate this down.
+    # good one: this script runs on the server that holds the FTP data exported by solarlog. So we can use the local file system here.
     pac = 0
     with open('/home/ftp/data/solarlog/min_cur.js', 'r') as data:
         for line in data.readlines():
