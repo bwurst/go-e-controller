@@ -6,11 +6,12 @@ import requests
 import math
 import logging
 import os.path
+import subprocess
 
 logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
 
-def get_pv_current():
+def old_get_pv_current():
     # HACKY
     # we don't have a connection to the right PV installation yet, so we do fetch percentage of our other installation (similar orientation) and calculate this down.
     # good one: this script runs on the server that holds the FTP data exported by solarlog. So we can use the local file system here.
@@ -31,6 +32,21 @@ def get_pv_current():
     logging.debug('PV current: %.1f A' % current)
     return math.floor(current)
 
+
+
+def get_pv_current():
+    sbfspot = subprocess.run("~/bin/SBFspot/SBFspot -nocsv -v2 -cfgHaus32.cfg", shell=True, stdout=subprocess.PIPE, encoding='utf-8')
+    try:
+        for line in sbfspot.stdout.splitlines():
+            if 'Total Pac' in line:
+                m = re.search('(?P<power>[0-9.]+)kW', line)
+                power = int(m.group('power').replace('.', ''))
+                logging.debug('PV power: %.2f W' % power)
+                current = (power / 230) / 3
+                logging.debug('PV current: %.1f A' % current)
+                return math.floor(current)
+    except:
+        logging.error('error getting Pac from solar power plant')
 
 
 class GOE(object):
@@ -90,14 +106,14 @@ try:
         except:
             logging.debug('error reading PV power')
             # don't change
-            pv = goe['amp']
+            pv = int(goe['amp'])
 
         # if pv['amp'] < 6: goe['amp'] = 6
         # elif pv['amp'] > 20: goe['amp'] = 20
         # else: goe['amp'] = pv['amp']
-        if pv < 6:
-            logging.info('PV < 6 => 6')
-            goe['amp'] = '6'
+        if pv < 10:
+            logging.info('PV < 10 => 10')
+            goe['amp'] = '10'
         elif pv > 20:
             logging.info('PV > 20 => 20')
             goe['amp'] = '20'
