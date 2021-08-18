@@ -2,11 +2,14 @@
 
 GOE_ADDRESS="http://goe"
 
+import re
 import requests
 import math
 import logging
 import os.path
 import subprocess
+import traceback
+import sys
 
 #logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.DEBUG)
 logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
@@ -17,14 +20,16 @@ def get_pv_current():
     try:
         for line in sbfspot.stdout.splitlines():
             if 'Total Pac' in line:
+                logging.debug('found Total Pac: ' + line)
                 m = re.search('(?P<power>[0-9.]+)kW', line)
                 power = int(m.group('power').replace('.', ''))
                 logging.debug('PV power: %.2f W' % power)
                 current = (power / 230) / 3
                 logging.debug('PV current: %.1f A' % current)
-                return math.floor(current)
+                return current
     except:
         logging.error('error getting Pac from solar power plant')
+        traceback.print_exc()
 
 
 class GOE(object):
@@ -47,6 +52,7 @@ class GOE(object):
 
     def set_var(self, var, value):
         oldval = self.status[var]
+        logging.debug('old value: %s (type %s) / new value: %s (type: %s)' % (oldval, type(oldval), value, type(value)))
         if value == oldval:
             return
         logging.info('set %s from %s to %s' % (var, oldval, value))
@@ -55,7 +61,7 @@ class GOE(object):
         if r.text != '1 succeeded and 0 failed.':
             logging.error('api call returned '+r.text)
         self.get_status()
-        if self.status[var] != value:
+        if int(self.status[var]) != int(value):
             raise RuntimeError('charger did not accept value change')
 
 try:
@@ -74,7 +80,7 @@ try:
     # if goe['amp'] == 32: do nothing
     # our work is to be done when car is charging!
     # if goe['car'] == 2: run
-    if int(goe['amp']) != 32 and int(goe['car']) == 2:
+    if int(goe['amp']) != 32 and (int(goe['car']) == 2 or (len(sys.argv) > 1 and sys.argv[1] == '-f')):
         # when car charges
         # look for PV current
         # calc max ampere from PV output
@@ -82,25 +88,21 @@ try:
             # thows error sometimes, then leave all alone
             pv = get_pv_current()
             logging.debug('PV gains %s A' % pv)
-            pv = pv - 1
-            logging.info('reducing PV by 1 A, remaining charge current: %s A' % pv)
+            pv = math.floor(pv - 0.5)
+            logging.info('reducing PV by 0.5 A, remaining charge current: %s A' % pv)
         except:
             logging.debug('error reading PV power')
             # don't change
             pv = int(goe['amp'])
 
         # if pv['amp'] < 6: goe['amp'] = 6
-        # elif pv['amp'] > 20: goe['amp'] = 20
         # else: goe['amp'] = pv['amp']
         if pv < 10:
             logging.info('PV < 10 => 10')
-            goe['amp'] = '10'
-        elif pv > 20:
-            logging.info('PV > 20 => 20')
-            goe['amp'] = '20'
+            goe['amp'] = 10
         else:
             logging.info('PV = %s => %s' % (pv, pv))
-            goe['amp'] = '%s' % pv
+            goe['amp'] = pv
 except requests.exceptions.ConnectionError:
     logging.error('exception in main program')
     pass
