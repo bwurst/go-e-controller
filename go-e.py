@@ -26,7 +26,7 @@ def get_pv_current():
                 logging.debug('PV power: %.2f W' % power)
                 current = (power / 230) / 3
                 logging.debug('PV current: %.1f A' % current)
-                return current
+                return power
     except:
         logging.error('error getting Pac from solar power plant')
         traceback.print_exc()
@@ -67,14 +67,18 @@ class GOE(object):
 try:
     goe = GOE()
 
-    if int(goe['amp']) != 16:
-        logging.info('car = %s / amp = %s' % (goe['car'], goe['amp']));
+    phases = 3
+    if int(goe['psm']) == 1:
+        phases = 1
+    if int(goe['amp']) != 16 or phases != 3:
+        logging.info('car = %s / amp = %s / phases=%s' % (goe['car'], goe['amp'], phases));
 
     # when charge is done and car still connected, always reset to 16A for the next time
     # if goe['car'] == 4: set amp=16
-    if int(goe['car']) == 4 and int(goe['amp']) != 16:
+    if int(goe['car']) == 4 and (int(goe['amp']) != 16 or phases != 3):
         logging.info('reset power to 16A')
         goe['amp'] = '16'
+        goe['psm'] = '2'
 
     # when user selected 32A manually, don't touch. When 32A charging is over, current has been reset in the last step.
     # if goe['amp'] == 32: do nothing
@@ -87,21 +91,36 @@ try:
         try:
             # thows error sometimes, then leave all alone
             pv = get_pv_current()
-            logging.debug('PV gains %s A' % pv)
-            pv = math.floor(pv - 0.5)
-            logging.info('reducing PV by 0.5 A, remaining charge current: %s A' % pv)
+            pv_current = (pv / 230) / 3
+            logging.info('PV gains %s W' % pv)
+            # house usage: ~500W
+            pv = math.floor(pv - 500)
+            logging.info('reducing PV by 500 Watts, remaining charge power: %s W / %s A' % (pv, pv_current))
         except:
-            logging.debug('error reading PV power')
+            logging.error('error reading PV power')
             # don't change
-            pv = int(goe['amp'])
+            pv = int(goe['amp']) * 230 * 3
+            pv_current = int(goe['amp'])
 
         # if pv['amp'] < 6: goe['amp'] = 6
         # else: goe['amp'] = pv['amp']
+        if phases == 1 and pv_current > 10:
+            # switch to three-phase-charging
+            logging.info('PV > 10 => switch to 3 phases')
+            goe['psm'] = 2
+            phases = 3
+        if pv_current < 10 and phases == 3:
+            # switch to one-phase-charging
+            logging.info('PV < 10 => switch to 1 phase')
+            goe['psm'] = 1
+            phases = 1
+        if phases == 1:
+            pv_current = pv_current * 3
         if pv < 10:
-            logging.info('PV < 10 => 10')
+            logging.info('PV == %s (< 10) => 10' % (pv_current,))
             goe['amp'] = 10
         else:
-            logging.info('PV = %s => %s' % (pv, pv))
+            logging.info('PV = %s => %s' % (pv_current, pv_current))
             goe['amp'] = pv
 except requests.exceptions.ConnectionError:
     logging.error('exception in main program')
