@@ -19,6 +19,8 @@ def get_pv_current():
     sbfspot = subprocess.run("~/bin/SBFspot/SBFspot -nocsv -v2 -cfgHaus32.cfg", shell=True, stdout=subprocess.PIPE, encoding='utf-8')
     try:
         for line in sbfspot.stdout.splitlines():
+            if "Nothing to do... it's dark" in line:
+                return None
             if 'Total Pac' in line:
                 logging.debug('found Total Pac: ' + line)
                 m = re.search('(?P<power>[0-9.]+)kW', line)
@@ -91,10 +93,14 @@ try:
         try:
             # thows error sometimes, then leave all alone
             pv = get_pv_current()
-            pv_current = (pv / 230) / 3
+            if not pv:
+                # it's night switch to 11kW charge, it does not matter
+                logging.info("it's night, switch to 16A on three phases to get the car full")
+                pv=11540
             logging.info('PV gains %s W' % pv)
             # house usage: ~500W
             pv = math.floor(pv - 500)
+            pv_current = math.floor((pv / 230) / 3)
             logging.info('reducing PV by 500 Watts, remaining charge power: %s W / %s A' % (pv, pv_current))
         except:
             logging.error('error reading PV power')
@@ -121,7 +127,7 @@ try:
             goe['amp'] = 10
         else:
             logging.info('PV = %s => %s' % (pv_current, pv_current))
-            goe['amp'] = pv
+            goe['amp'] = pv_current
 except requests.exceptions.ConnectionError:
     logging.error('exception in main program')
     pass
