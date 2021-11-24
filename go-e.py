@@ -99,8 +99,8 @@ try:
                 pv=11540
             logging.info('PV gains %s W' % pv)
             # house usage: ~500W
-            pv = math.floor(pv - 500)
-            pv_current = math.floor((pv / 230) / 3)
+            pv = max(pv - 500, 0)
+            pv_current = round((pv / 230) / 3)
             logging.info('reducing PV by 500 Watts, remaining charge power: %s W / %s A' % (pv, pv_current))
         except:
             logging.error('error reading PV power')
@@ -121,8 +121,9 @@ try:
             goe['psm'] = 1
             phases = 1
         if phases == 1:
-            pv_current = pv_current * 3
-        if pv < 10:
+            pv_current = round(pv / 230)
+        logging.info('loading on %i phase(s) with %s A, using %i W' % (phases, pv_current, pv_current * phases * 230))
+        if pv_current < 10:
             logging.info('PV == %s (< 10) => 10' % (pv_current,))
             goe['amp'] = 10
         else:
