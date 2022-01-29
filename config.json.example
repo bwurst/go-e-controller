@@ -1,0 +1,14 @@
+[
+	{
+		"goe_address": "http://goe",
+		"pvtype": "SBFspot",
+		"sbfspotconfig": "System1.cfg"
+	},
+	{
+		"goe_address": "http://goe2",
+		"pvtype": "SBFspot",
+		"sbfspotconfig": "System2.cfg"
+	}
+
+]
+
