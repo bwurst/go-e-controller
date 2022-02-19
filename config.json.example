@@ -2,7 +2,7 @@
 	{
 		"goe_address": "http://goe",
 		"min_current": 10,
-		"max_current": 32,
+		"max_current": 31,
 		"consumption": 500,
 		"pvtype": "SBFspot",
 		"sbfspotconfig": "System1.cfg"
@@ -10,7 +10,7 @@
 	{
 		"goe_address": "http://goe2",
 		"min_current": 10,
-		"max_current": 32,
+		"max_current": 31,
 		"consumption": 500,
 		"pvtype": "SBFspot",
 		"sbfspotconfig": "System2.cfg"

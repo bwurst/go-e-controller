@@ -112,8 +112,12 @@ def work(goe_address, pvcallback, config):
         if int(goe['psm']) == 1:
             phases = 1
 
-        # when no car is connected, reset to 16A on three phases for the next time
-        if int(goe['car']) == 1:
+        # car == 0: no car
+        # car == 1: charge running
+        # car == 2: waiting for car to get ready
+        # car == 4: charge stopped, either full or paused by frc=1
+        # when charge finished or no car is connected, reset to 16A on three phases for the next time
+        if int(goe['car']) == 1 or (int(goe['car']) == 4 and int(goe['frc']) == 0):
             if int(goe['amp']) != 16 or phases != 3:
                 logging.info('%s: reset power to 16A' % goe.hostname)
                 goe['amp'] = '16'
