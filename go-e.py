@@ -102,16 +102,15 @@ def work(goe_address, pvcallback, config):
         if not goe.status:
             raise RuntimeError('error initializing goe object')
 
+        # when user selected 32A manually, don't touch. When 32A charging is over, current has been reset in the last step.
+        if goe['amp'] == 32 and not (len(sys.argv) > 1 and sys.argv[1] == '-f'):
+            # do not touch
+            return
+
+        # how many phases may be used?
         phases = 3
         if int(goe['psm']) == 1:
             phases = 1
-        used_phases = 0
-        for i in range(3):
-            if int(goe['nrg'][2]) > 0:
-                used_phases += 1
-
-        if int(goe['amp']) != 16 or phases != 3:
-            logging.info('%s: car = %s / amp = %s / phases=%s / frc=%s' % (goe.hostname, goe['car'], goe['amp'], phases, goe['frc']));
 
         # when no car is connected, reset to 16A on three phases for the next time
         if int(goe['car']) == 1:
@@ -122,29 +121,32 @@ def work(goe_address, pvcallback, config):
             # do nothing else, as no car is connected
             return
 
-        # when user selected 32A manually, don't touch. When 32A charging is over, current has been reset in the last step.
-        if goe['amp'] == 32 and not (len(sys.argv) > 1 and sys.argv[1] == '-f'):
-            # do not touch
-            return
+        # how many phases uses the car?
+        used_phases = 0
+        for i in (4, 5, 6):
+            if int(goe['nrg'][i]) > 0:
+                used_phases += 1
+
+        logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / frc=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['frc']));
 
         # when car charges
         # look for PV current
         # calc max ampere from PV output
         power = 0
         try:
-        # thows error sometimes, then leave all alone
+            # thows error sometimes, then leave all alone
             power = pvcallback()
             if not power:
                 logging.info("%s: it's night" % goe.hostname)
                 power = 0
             else:
                 logging.info('%s: PV gains %s W' % (goe.hostname, power))
-                # house usage: ~500W
+                # house usage: default ~500W
                 consumption = 500
                 if "consumption" in config:
                     consumption = config['consumption']
                 power = max(power - consumption, 0)
-                logging.info('%s: reducing PV by 500 Watts, remaining charge power: %s W' % (goe.hostname, power))
+                logging.info('%s: reducing PV by %s Watts, remaining charge power: %s W' % (goe.hostname, consumption, power))
         except Exception as e:
             logging.error('%s: error reading PV power: %s' % (goe.hostname, str(e)))
             # don't change
@@ -153,10 +155,10 @@ def work(goe_address, pvcallback, config):
         min_current = 10
         if "min_current" in config:
             min_current = config["min_current"]
-        max_1pha_current = 30
+        max_current = 30
         if "max_current" in config:
-            max_1pha_current = config["max_current"]
-        current = round((power / 230) / used_phases)
+            max_current = config["max_current"]
+        current = round((power / 230) / max(used_phases, 1))
 
         if phases == 1 and current < min_current:
             # bisher schon auf einer phase und dafür zu wenig leistung...
@@ -168,9 +170,9 @@ def work(goe_address, pvcallback, config):
 
         # Bleibt so lange auf einer Phase bis 30 Ampere (= Das Minimum von 10A auf 3 Phasen) überschritten werden
         # Bleibe so lange auf 3 Phasen, bis das Minimum unterschritten wird.
-        if phases == 1 and current > max_1pha_current:
+        if phases == 1 and current > max_current:
             # switch to three-phase-charging
-            logging.info('%s: PV > %s A => switch to 3 phases' % (goe.hostname, max_1pha_current))
+            logging.info('%s: PV > %s A => switch to 3 phases' % (goe.hostname, max_current))
             goe['psm'] = 2
             phases = 3
         if current < min_current and phases == 3 and used_phases > 1:
@@ -179,12 +181,15 @@ def work(goe_address, pvcallback, config):
             goe['psm'] = 1
             phases = 1
 
-        current = round((power / 230) / min(used_phases, phases))
-        power = current * 230 * min(used_phases, phases)
+        current = round((power / 230) / max(1, min(used_phases, phases)))
+        if current > max_current:
+            current = max_current
+
+        power = current * 230 * max(1, min(used_phases, phases))
         if current < min_current:
             logging.info('%s: PV power below minimum: %s A / %s W' % (goe.hostname, current, power))
             current = min_current
-        power = current * 230 * min(used_phases, phases)
+        power = current * 230 * max(1, min(used_phases, phases))
         logging.info('%s: setting charger to %s A / %s W (phases: %s / used_phases: %s)' % (goe.hostname, current, power, phases, min(used_phases, phases)))
         goe['amp'] = current
 
