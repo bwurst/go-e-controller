@@ -49,10 +49,8 @@ def get_shelly3em_current_wrapper(shellyhostname):
         r = requests.get('http://%s/status' % (shellyhostname,))
         status = r.json()
         power = status['total_power']
-        if power < 0:
-            # pv gains!
-            return -power
-        return 0
+        # pv gains!
+        return -power
 
     return get_power
 
@@ -109,7 +107,7 @@ class GOE(object):
         if int(self.status[var]) != int(value):
             raise RuntimeError('charger "%s" did not accept value change' % self.hostname)
 
-def work(goe_address, pvcallback, config):
+def work(goe_address, pvcallback, config, power_is_surplus=False):
     try:
         goe = GOE(goe_address)
         if not goe.status:
@@ -131,6 +129,9 @@ def work(goe_address, pvcallback, config):
         for i in (4, 5, 6):
             if int(goe['nrg'][i]) > 0:
                 used_phases += 1
+
+        current_charging_power = float(goe['nrg'][11])
+
 
         logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / alw=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['alw']));
         # car == 1: no car
@@ -156,9 +157,12 @@ def work(goe_address, pvcallback, config):
         try:
             # thows error sometimes, then leave all alone
             power = pvcallback()
+            if power_is_surplus:
+                logging.debug('%s: surplus: %.2f, adding charging power %.2f' % (goe.hostname, power, current_charging_power))
+                power += current_charging_power
             if not power:
                 logging.info("%s: it's night" % goe.hostname)
-                power = 0
+                return
             else:
                 logging.info('%s: PV gains %s W' % (goe.hostname, power))
                 # house usage: default ~500W
@@ -222,9 +226,14 @@ def work(goe_address, pvcallback, config):
 
 for system in config:
     get_current = None
+    power_is_surplus = False
     if system['pvtype'] == 'SBFspot':
+        # PV-Ertrag
+        power_is_surplus = False
         get_current = get_sbfspot_current_wrapper(system['sbfspotconfig'])
     elif system['pvtype'] == 'shelly3em':
+        # Gesamt-Überschuss (!)
+        power_is_surplus = True
         get_current = get_shelly3em_current_wrapper(system['shellyhostname'])
-    work(system['goe_address'], get_current, system)
+    work(system['goe_address'], get_current, system, power_is_surplus=power_is_surplus)
 
