@@ -19,8 +19,8 @@ with open(configfile, 'r') as conf:
 # config-example: [{'goe-address': 'http://goe', 'pvtype': 'SBFspot', 'sbfspotconfig': 'Haus32.cfg'}]
 
 
-logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.DEBUG)
-#logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
+#logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.DEBUG)
+logging.basicConfig(filename=os.path.join(os.path.dirname(os.path.realpath(__file__)), 'go-e.log'),format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
 def get_sbfspot_current_wrapper(sbfspotconfig):
     def get_power():
@@ -133,11 +133,11 @@ def work(goe_address, pvcallback, config, power_is_surplus=False):
         current_charging_power = float(goe['nrg'][11])
 
 
-        logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / alw=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['alw']));
+        logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / alw=%s / frc=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['alw'], goe['frc']));
         # car == 1: no car
         # car == 2: charge running
         # car == 3: waiting for car to get ready
-        # car == 4: charge stopped, either full or paused by alw=false
+        # car == 4: charge stopped, either full or paused by frc=1
         # when charge finished or no car is connected, reset to 16A on three phases for the next time
         if (int(goe['car']) == 1 or (int(goe['car']) == 4 and int(goe['alw']) == True)) and not (len(sys.argv) > 1 and sys.argv[1] == '-f'):
             if int(goe['amp']) != 16 or phases != 3:
@@ -148,7 +148,7 @@ def work(goe_address, pvcallback, config, power_is_surplus=False):
             logging.debug('%s: no car connected.' % (goe.hostname,))
             return
 
-        logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / alw=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['alw']));
+        logging.info('%s: car = %s / amp = %s / phases=%s / used_phases=%s / alw=%s / frc=%s' % (goe.hostname, goe['car'], goe['amp'], phases, used_phases, goe['alw'], goe['frc']));
 
         # when car charges
         # look for PV current
@@ -187,10 +187,10 @@ def work(goe_address, pvcallback, config, power_is_surplus=False):
         if phases == 1 and current < min_current:
             # bisher schon auf einer phase und dafür zu wenig leistung...
             logging.info('%s: power too low, stop charging.' % goe.hostname)
-            goe['alw'] = False #stop
+            goe['frc'] = 1 #stop
             return
         else:
-            goe['alw'] = True #allow
+            goe['frc'] = 0 #allow
 
         # Bleibt so lange auf einer Phase bis 30 Ampere (= Das Minimum von 10A auf 3 Phasen) überschritten werden
         # Bleibe so lange auf 3 Phasen, bis das Minimum unterschritten wird.
